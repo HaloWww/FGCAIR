@@ -53,7 +53,7 @@ class FGCAirTemperatureSourceSelect(SelectEntity):
 
     def _handle_state_updated(self, did: str) -> None:
         if did == self.did:
-            self.async_write_ha_state()
+            self.hass.loop.call_soon_threadsafe(self.async_write_ha_state)
 
     @property
     def options(self) -> list[str]:

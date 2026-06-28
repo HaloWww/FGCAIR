@@ -118,7 +118,7 @@ class FGCAirClimate(ClimateEntity):
         merged = self._default_attrs()
         merged.update(cached)
         self._attrs = merged
-        self.async_write_ha_state()
+        self.hass.loop.call_soon_threadsafe(self.async_write_ha_state)
 
     async def async_update(self) -> None:
         await self._refresh_device(self.did)
