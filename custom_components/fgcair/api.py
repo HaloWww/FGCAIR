@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 import urllib.error
 import urllib.parse
@@ -10,6 +11,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from .const import API_BASE, API_HOST, APP_ID, SITE_HOST, KNOWN_INDOOR_DIDS
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class FGCAirError(Exception):
@@ -58,11 +61,14 @@ def _request_sync(
     if token:
         headers["X-Gizwits-User-token"] = token
     req = urllib.request.Request(f"{API_BASE}{path}", data=data, headers=headers, method=method)
+    _LOGGER.debug("FGCAir request %s %s body=%s", method, path, body)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
+            _LOGGER.debug("FGCAir response %s %s status=%s body=%s", method, path, resp.status, raw)
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
+        _LOGGER.warning("FGCAir request failed %s %s status=%s body=%s", method, path, exc.code, detail)
         if _is_token_expired_error(detail) or exc.code in (401, 403):
             raise FGCAirAuthError(detail) from exc
         raise FGCAirError(f"HTTP {exc.code} {method} {path}: {detail}") from exc
@@ -149,10 +155,14 @@ class FGCAirClient:
         if not self.session:
             raise FGCAirAuthError("尚未登录")
         try:
-            return await self._request("POST", f"/app/control/{did}", token=self.session.token, body={"attrs": attrs})
+            result = await self._request("POST", f"/app/control/{did}", token=self.session.token, body={"attrs": attrs})
+            _LOGGER.info("FGCAir control accepted did=%s attrs=%s result=%s", did, attrs, result)
+            return result
         except FGCAirAuthError:
             await self.ensure_session(force=True)
-            return await self._request("POST", f"/app/control/{did}", token=self.session.token, body={"attrs": attrs})
+            result = await self._request("POST", f"/app/control/{did}", token=self.session.token, body={"attrs": attrs})
+            _LOGGER.info("FGCAir control accepted after token refresh did=%s attrs=%s result=%s", did, attrs, result)
+            return result
 
     async def latest(self, did: str) -> dict[str, Any]:
         await self.ensure_session()

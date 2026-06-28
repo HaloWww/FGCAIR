@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import logging
+
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.storage import Store
 
 from .api import FGCAirClient, FGCAirSession
 from .const import CONF_SELECTED_DIDS, DOMAIN, PLATFORMS
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -25,9 +31,42 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry,
             data={**entry.data, "uid": new_session.uid, "token": new_session.token, "expire_at": new_session.expire_at},
         )
+        _LOGGER.info("FGCAir token refreshed uid=%s expire_at=%s", new_session.uid, new_session.expire_at)
+
+    async def test_control(call: ServiceCall) -> None:
+        attrs = {}
+        pk_index = int(call.data.get("pk_index", 4))
+        if "power" in call.data:
+            attrs[f"Power_indoor_PK{pk_index}"] = bool(call.data["power"])
+        if "mode" in call.data:
+            attrs[f"Mode_indoor_PK{pk_index}"] = int(call.data["mode"])
+        if "temperature" in call.data:
+            attrs[f"Temp_indoor_PK{pk_index}"] = int(call.data["temperature"])
+        if "speed" in call.data:
+            attrs[f"Speed_indoor_PK{pk_index}"] = int(call.data["speed"])
+        if not attrs:
+            attrs[f"Query_indoor_PK{pk_index}"] = True
+        result = await client.control(str(call.data["did"]), attrs)
+        _LOGGER.info("FGCAir test_control did=%s attrs=%s result=%s", call.data["did"], attrs, result)
 
     if not hass.services.has_service(DOMAIN, "refresh_token"):
         hass.services.async_register(DOMAIN, "refresh_token", refresh_token)
+    if not hass.services.has_service(DOMAIN, "test_control"):
+        hass.services.async_register(
+            DOMAIN,
+            "test_control",
+            test_control,
+            schema=vol.Schema(
+                {
+                    vol.Required("did"): str,
+                    vol.Optional("pk_index", default=4): int,
+                    vol.Optional("power"): bool,
+                    vol.Optional("mode"): int,
+                    vol.Optional("temperature"): int,
+                    vol.Optional("speed"): int,
+                }
+            ),
+        )
     return True
 
 

@@ -1,3 +1,48 @@
 refresh_token:
   name: 刷新 token
   description: 立即用配置中的用户名和密码重新登录并刷新 FGCAir token。
+
+test_control:
+  name: 测试控制
+  description: 直接调用 FGCAir 控制接口，便于在开发者工具中排查设备是否可控。
+  fields:
+    did:
+      name: 设备 DID
+      required: true
+      selector:
+        text:
+    pk_index:
+      name: PK 后缀
+      default: 4
+      selector:
+        number:
+          min: 0
+          max: 12
+          mode: box
+    power:
+      name: 开关
+      selector:
+        boolean:
+    mode:
+      name: 模式
+      description: 0 自动，1 制冷，2 除湿，3 通风，4 制热。
+      selector:
+        number:
+          min: 0
+          max: 4
+          mode: box
+    temperature:
+      name: 温度
+      selector:
+        number:
+          min: 18
+          max: 30
+          mode: slider
+    speed:
+      name: 风速
+      description: 0 自动，1 超低，2 低档，3 中档，4 高档，5 中高，6 超高。
+      selector:
+        number:
+          min: 0
+          max: 6
+          mode: box
