@@ -37,6 +37,7 @@ test_control:
         number:
           min: 18
           max: 30
+          step: 0.5
           mode: slider
     speed:
       name: 风速

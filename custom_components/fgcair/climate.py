@@ -22,6 +22,7 @@ DEFAULT_POWER = False
 DEFAULT_MODE = 1
 DEFAULT_SPEED = 0
 DEFAULT_TEMP = 26
+TEMP_STEP = 0.5
 _LOGGER = logging.getLogger(__name__)
 
 SUPPORTED_FEATURES = ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.FAN_MODE
@@ -54,7 +55,7 @@ class FGCAirClimate(ClimateEntity):
     _attr_fan_modes = list(FAN_TO_SPEED.keys())
     _attr_min_temp = 18
     _attr_max_temp = 30
-    _attr_target_temperature_step = 1
+    _attr_target_temperature_step = TEMP_STEP
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device: dict[str, Any]) -> None:
@@ -158,7 +159,7 @@ class FGCAirClimate(ClimateEntity):
             if updates:
                 await self._send_attrs(self._build_full_attrs(updates))
             return
-        temperature = max(18, min(30, int(round(float(kwargs[ATTR_TEMPERATURE])))))
+        temperature = max(18, min(30, round(float(kwargs[ATTR_TEMPERATURE]) / TEMP_STEP) * TEMP_STEP))
         updates[f"{TEMP_PREFIX}{self.pk_index}"] = temperature
         await self._send_attrs(self._build_full_attrs(updates))
 

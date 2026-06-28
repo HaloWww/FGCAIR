@@ -41,7 +41,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if "mode" in call.data:
             attrs[f"Mode_indoor_PK{pk_index}"] = int(call.data["mode"])
         if "temperature" in call.data:
-            attrs[f"Temp_indoor_PK{pk_index}"] = int(call.data["temperature"])
+            attrs[f"Temp_indoor_PK{pk_index}"] = float(call.data["temperature"])
         if "speed" in call.data:
             attrs[f"Speed_indoor_PK{pk_index}"] = int(call.data["speed"])
         if not attrs:
@@ -62,7 +62,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     vol.Optional("pk_index", default=4): int,
                     vol.Optional("power"): bool,
                     vol.Optional("mode"): int,
-                    vol.Optional("temperature"): int,
+                    vol.Optional("temperature"): vol.Coerce(float),
                     vol.Optional("speed"): int,
                 }
             ),
