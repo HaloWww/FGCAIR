@@ -62,7 +62,7 @@ class FGCAirClimate(ClimateEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:air-conditioner"
     _attr_supported_features = SUPPORTED_FEATURES
-    _attr_hvac_modes = [HVACMode.OFF, HVACMode.COOL, HVACMode.DRY, HVACMode.FAN_ONLY, HVACMode.HEAT, HVACMode.HEAT_COOL]
+    _attr_hvac_modes = [HVACMode.OFF, HVACMode.COOL, HVACMode.HEAT, HVACMode.DRY]
     _attr_fan_modes = list(FAN_TO_SPEED.keys())
     _attr_min_temp = 18
     _attr_max_temp = 30
@@ -145,7 +145,8 @@ class FGCAirClimate(ClimateEntity):
         if power is False:
             return HVACMode.OFF
         mode = self._attrs.get(_first_key(self._attrs, MODE_PREFIX, self.pk_index))
-        return HVACMode(MODE_TO_HVAC.get(mode, HVACMode.HEAT_COOL))
+        hvac_mode = HVACMode(MODE_TO_HVAC.get(mode, HVACMode.COOL))
+        return hvac_mode if hvac_mode in self.hvac_modes else HVACMode.COOL
 
     @property
     def target_temperature(self) -> float | None:
@@ -182,9 +183,11 @@ class FGCAirClimate(ClimateEntity):
         updates: dict[str, Any] = {}
         hvac_mode = kwargs.get("hvac_mode")
         if hvac_mode and self._coerce_hvac_mode(hvac_mode) != HVACMode.OFF:
-            hvac_to_mode = {HVACMode.HEAT_COOL: 0, HVACMode.COOL: 1, HVACMode.DRY: 2, HVACMode.FAN_ONLY: 3, HVACMode.HEAT: 4}
+            hvac_to_mode = {HVACMode.COOL: 1, HVACMode.DRY: 2, HVACMode.HEAT: 4}
+            hvac_mode = self._coerce_hvac_mode(hvac_mode)
+            hvac_mode = hvac_mode if hvac_mode in hvac_to_mode else HVACMode.COOL
             updates[f"{POWER_PREFIX}{self.pk_index}"] = True
-            updates[f"{MODE_PREFIX}{self.pk_index}"] = hvac_to_mode[self._coerce_hvac_mode(hvac_mode)]
+            updates[f"{MODE_PREFIX}{self.pk_index}"] = hvac_to_mode[hvac_mode]
         if ATTR_TEMPERATURE not in kwargs:
             if updates:
                 await self._send_attrs(self._build_full_attrs(updates))
@@ -215,7 +218,8 @@ class FGCAirClimate(ClimateEntity):
         if hvac_mode == HVACMode.OFF:
             await self.async_turn_off()
             return
-        hvac_to_mode = {HVACMode.HEAT_COOL: 0, HVACMode.COOL: 1, HVACMode.DRY: 2, HVACMode.FAN_ONLY: 3, HVACMode.HEAT: 4}
+        hvac_to_mode = {HVACMode.COOL: 1, HVACMode.DRY: 2, HVACMode.HEAT: 4}
+        hvac_mode = hvac_mode if hvac_mode in hvac_to_mode else HVACMode.COOL
         attrs = self._build_full_attrs({
             f"{POWER_PREFIX}{self.pk_index}": True,
             f"{MODE_PREFIX}{self.pk_index}": hvac_to_mode[hvac_mode],
