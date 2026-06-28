@@ -46,7 +46,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             attrs[f"Speed_indoor_PK{pk_index}"] = int(call.data["speed"])
         if not attrs:
             attrs[f"Query_indoor_PK{pk_index}"] = True
-        result = await client.control(str(call.data["did"]), attrs)
+        result = await client.control_sequence(str(call.data["did"]), attrs)
         _LOGGER.info("FGCAir test_control did=%s attrs=%s result=%s", call.data["did"], attrs, result)
 
     if not hass.services.has_service(DOMAIN, "refresh_token"):

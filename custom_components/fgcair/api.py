@@ -164,6 +164,13 @@ class FGCAirClient:
             _LOGGER.info("FGCAir control accepted after token refresh did=%s attrs=%s result=%s", did, attrs, result)
             return result
 
+    async def control_sequence(self, did: str, attrs: dict[str, Any], delay: float = 0.35) -> list[Any]:
+        results = []
+        for key, value in attrs.items():
+            results.append(await self.control(did, {key: value}))
+            await asyncio.sleep(delay)
+        return results
+
     async def latest(self, did: str) -> dict[str, Any]:
         await self.ensure_session()
         if not self.session:

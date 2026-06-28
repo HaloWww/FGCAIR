@@ -148,17 +148,15 @@ class FGCAirClimate(ClimateEntity):
         await self._send_hvac_mode(self._coerce_hvac_mode(hvac_mode))
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        attrs: dict[str, Any] = {
-            f"{POWER_PREFIX}{self.pk_index}": True,
-            f"{MODE_PREFIX}{self.pk_index}": self._attrs.get(f"{MODE_PREFIX}{self.pk_index}", DEFAULT_MODE),
-            f"{SPEED_PREFIX}{self.pk_index}": self._attrs.get(f"{SPEED_PREFIX}{self.pk_index}", DEFAULT_SPEED),
-        }
+        attrs: dict[str, Any] = {}
         hvac_mode = kwargs.get("hvac_mode")
         if hvac_mode and self._coerce_hvac_mode(hvac_mode) != HVACMode.OFF:
             hvac_to_mode = {HVACMode.HEAT_COOL: 0, HVACMode.COOL: 1, HVACMode.DRY: 2, HVACMode.FAN_ONLY: 3, HVACMode.HEAT: 4}
+            attrs[f"{POWER_PREFIX}{self.pk_index}"] = True
             attrs[f"{MODE_PREFIX}{self.pk_index}"] = hvac_to_mode[self._coerce_hvac_mode(hvac_mode)]
         if ATTR_TEMPERATURE not in kwargs:
-            await self._send_attrs(attrs)
+            if attrs:
+                await self._send_attrs(attrs)
             return
         temperature = max(18, min(30, int(round(float(kwargs[ATTR_TEMPERATURE])))))
         attrs[f"{TEMP_PREFIX}{self.pk_index}"] = temperature
@@ -166,9 +164,6 @@ class FGCAirClimate(ClimateEntity):
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         attrs = {
-            f"{POWER_PREFIX}{self.pk_index}": True,
-            f"{MODE_PREFIX}{self.pk_index}": self._attrs.get(f"{MODE_PREFIX}{self.pk_index}", DEFAULT_MODE),
-            f"{TEMP_PREFIX}{self.pk_index}": self._attrs.get(f"{TEMP_PREFIX}{self.pk_index}", DEFAULT_TEMP),
             f"{SPEED_PREFIX}{self.pk_index}": FAN_TO_SPEED[fan_mode],
         }
         await self._send_attrs(attrs)
@@ -176,9 +171,6 @@ class FGCAirClimate(ClimateEntity):
     async def async_turn_on(self) -> None:
         attrs = {
             f"{POWER_PREFIX}{self.pk_index}": True,
-            f"{MODE_PREFIX}{self.pk_index}": self._attrs.get(f"{MODE_PREFIX}{self.pk_index}", DEFAULT_MODE),
-            f"{SPEED_PREFIX}{self.pk_index}": self._attrs.get(f"{SPEED_PREFIX}{self.pk_index}", DEFAULT_SPEED),
-            f"{TEMP_PREFIX}{self.pk_index}": self._attrs.get(f"{TEMP_PREFIX}{self.pk_index}", DEFAULT_TEMP),
         }
         await self._send_attrs(attrs)
 
@@ -196,13 +188,11 @@ class FGCAirClimate(ClimateEntity):
         attrs = {
             f"{POWER_PREFIX}{self.pk_index}": True,
             f"{MODE_PREFIX}{self.pk_index}": hvac_to_mode[hvac_mode],
-            f"{TEMP_PREFIX}{self.pk_index}": self._attrs.get(f"{TEMP_PREFIX}{self.pk_index}", DEFAULT_TEMP),
-            f"{SPEED_PREFIX}{self.pk_index}": self._attrs.get(f"{SPEED_PREFIX}{self.pk_index}", DEFAULT_SPEED),
         }
         await self._send_attrs(attrs)
 
     async def _send_attrs(self, attrs: dict[str, Any]) -> None:
-        _LOGGER.info("Sending FGCAir climate control did=%s attrs=%s", self.did, attrs)
-        await self._client.control(self.did, attrs)
+        _LOGGER.info("Sending FGCAir climate control sequence did=%s attrs=%s", self.did, attrs)
+        await self._client.control_sequence(self.did, attrs)
         await self._save_attrs(attrs)
         self.async_write_ha_state()
