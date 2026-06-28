@@ -26,6 +26,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
 class FGCAirTemperatureSourceSelect(SelectEntity):
     _attr_has_entity_name = True
+    _attr_icon = "mdi:thermometer"
     _attr_translation_key = "temperature_source"
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, device: dict[str, Any]) -> None:

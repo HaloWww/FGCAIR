@@ -1,5 +1,6 @@
 {
   "name": "FGCAir",
+  "homeassistant": "2026.4.0",
   "render_readme": true,
-  "domains": ["climate"]
+  "domains": ["climate", "select"]
 }
