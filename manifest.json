@@ -1,0 +1,10 @@
+{
+  "domain": "fgcair",
+  "name": "FGCAir",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://www.home-assistant.io/integrations/homekit/",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "0.1.0"
+}

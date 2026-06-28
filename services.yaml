@@ -1,0 +1,3 @@
+refresh_token:
+  name: 刷新 token
+  description: 立即用配置中的用户名和密码重新登录并刷新 FGCAir token。

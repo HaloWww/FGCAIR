@@ -1,0 +1,36 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "FGCAir 账号",
+        "description": "输入 FGCAir/机智云账号密码。登录后会获取 token 并保存到 Home Assistant 配置项中。",
+        "data": {
+          "username": "用户名/手机号",
+          "password": "密码",
+          "auto_bind_captured": "自动绑定抓包中的网关"
+        }
+      },
+      "select_devices": {
+        "title": "选择空调设备",
+        "description": "选择要在 Home Assistant 中创建 climate 实体的室内机。后续可通过 HomeKit Bridge 桥接到 HomeKit。",
+        "data": {
+          "selected_dids": "室内机"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接 FGCAir 云端",
+      "invalid_auth": "账号、密码或 token 无效",
+      "no_devices": "没有获取到可用室内机"
+    },
+    "abort": {
+      "already_configured": "该账号已经配置"
+    }
+  },
+  "services": {
+    "refresh_token": {
+      "name": "刷新 token",
+      "description": "立即用配置中的用户名和密码重新登录并刷新 token。"
+    }
+  }
+}
