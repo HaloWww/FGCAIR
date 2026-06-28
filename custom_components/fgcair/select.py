@@ -9,19 +9,29 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .api import FGCAirClient, indoor_index
-from .const import CONF_SELECTED_DIDS, CONF_TEMP_SOURCE_ENTITY_ID, DOMAIN, SIGNAL_STATE_UPDATED
+from .api import indoor_index
+from .const import CONF_DEVICES, CONF_SELECTED_DIDS, CONF_TEMP_SOURCE_ENTITY_ID, DOMAIN, KNOWN_INDOOR_DIDS, SIGNAL_STATE_UPDATED
 
 SELF_OPTION = "自身室温"
 TEMPERATURE_DEVICE_CLASSES = {"temperature"}
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    data = hass.data[DOMAIN][entry.entry_id]
-    client: FGCAirClient = data["client"]
-    devices = await client.list_bindings()
     selected = set(entry.data.get(CONF_SELECTED_DIDS, []))
+    devices = _configured_devices(entry)
     async_add_entities([FGCAirTemperatureSourceSelect(hass, entry, device) for device in devices if device.get("did") in selected], True)
+
+
+def _configured_devices(entry: ConfigEntry) -> list[dict[str, Any]]:
+    devices = entry.data.get(CONF_DEVICES)
+    if isinstance(devices, list) and devices:
+        return [device for device in devices if isinstance(device, dict)]
+    selected = set(entry.data.get(CONF_SELECTED_DIDS, []))
+    return [
+        {"did": did, "product_name": "FGCAir 室内机", "mac": "", "dev_alias": ""}
+        for did in selected
+        if did in KNOWN_INDOOR_DIDS.values()
+    ]
 
 
 class FGCAirTemperatureSourceSelect(SelectEntity):

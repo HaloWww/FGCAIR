@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.climate import ClimateEntity, ClimateEntityFeature, HVACMode
@@ -11,22 +10,20 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .api import FGCAirClient, indoor_index, merge_state_cache, state_attrs_from_cache
-from .const import CONF_SELECTED_DIDS, CONF_TEMP_SOURCE_ENTITY_ID, DOMAIN, FAN_TO_SPEED, MODE_TO_HVAC, SIGNAL_STATE_UPDATED, SPEED_TO_FAN
+from .api import indoor_index, merge_state_cache, state_attrs_from_cache
+from .const import CONF_DEVICES, CONF_SELECTED_DIDS, CONF_TEMP_SOURCE_ENTITY_ID, DOMAIN, FAN_TO_SPEED, KNOWN_INDOOR_DIDS, MODE_TO_HVAC, SIGNAL_STATE_UPDATED, SPEED_TO_FAN
 
 POWER_PREFIX = "Power_indoor_PK"
 MODE_PREFIX = "Mode_indoor_PK"
 SPEED_PREFIX = "Speed_indoor_PK"
 TEMP_PREFIX = "Temp_indoor_PK"
 ROOM_TEMP_PREFIX = "Roomtemp_indoor_PK"
-QUERY_PREFIX = "Query_indoor_PK"
 DEFAULT_POWER = False
 DEFAULT_MODE = 1
 DEFAULT_SPEED = 0
 DEFAULT_TEMP = 26
 TEMP_STEP = 0.5
 _LOGGER = logging.getLogger(__name__)
-SCAN_INTERVAL = timedelta(seconds=15)
 
 SUPPORTED_FEATURES = ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.FAN_MODE
 if hasattr(ClimateEntityFeature, "TURN_ON"):
@@ -36,12 +33,22 @@ if hasattr(ClimateEntityFeature, "TURN_OFF"):
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    data = hass.data[DOMAIN][entry.entry_id]
-    client: FGCAirClient = data["client"]
-    devices = await client.list_bindings()
     selected = set(entry.data.get(CONF_SELECTED_DIDS, []))
+    devices = _configured_devices(entry)
     entities = [FGCAirClimate(hass, entry, device) for device in devices if device.get("did") in selected]
     async_add_entities(entities, True)
+
+
+def _configured_devices(entry: ConfigEntry) -> list[dict[str, Any]]:
+    devices = entry.data.get(CONF_DEVICES)
+    if isinstance(devices, list) and devices:
+        return [device for device in devices if isinstance(device, dict)]
+    selected = set(entry.data.get(CONF_SELECTED_DIDS, []))
+    return [
+        {"did": did, "product_name": "FGCAir 室内机", "mac": "", "dev_alias": ""}
+        for did in selected
+        if did in KNOWN_INDOOR_DIDS.values()
+    ]
 
 
 def _first_key(attrs: dict[str, Any], prefix: str, pk_index: int) -> str:
@@ -121,30 +128,10 @@ class FGCAirClimate(ClimateEntity):
         self.hass.loop.call_soon_threadsafe(self.async_write_ha_state)
 
     async def async_update(self) -> None:
-        await self._refresh_device(self.did)
         cached = state_attrs_from_cache(self._cache, self.did)
         merged = self._default_attrs()
         merged.update(cached)
         self._attrs = merged
-
-    async def _refresh_device(self, did: str) -> None:
-        query_key = f"{QUERY_PREFIX}{self.pk_index}"
-        try:
-            await self._client.control(did, {query_key: True})
-            latest = await self._client.latest(did)
-        except Exception:
-            _LOGGER.debug("Unable to refresh FGCAir latest data did=%s", did, exc_info=True)
-            return
-        attrs = latest.get("attr", {}) if isinstance(latest, dict) else {}
-        if isinstance(attrs, dict) and attrs:
-            data = self.hass.data[DOMAIN][self.entry.entry_id]
-            data["state_cache"] = merge_state_cache(
-                data["state_cache"],
-                {"did": did},
-                attrs,
-            )
-            await data["store"].async_save(data["state_cache"])
-            async_dispatcher_send(self.hass, SIGNAL_STATE_UPDATED, did)
 
     @property
     def _temp_source_entity_id(self) -> str | None:

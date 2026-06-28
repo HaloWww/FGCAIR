@@ -45,7 +45,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if "speed" in call.data:
             attrs[f"Speed_indoor_PK{pk_index}"] = int(call.data["speed"])
         if not attrs:
-            attrs[f"Query_indoor_PK{pk_index}"] = True
+            raise ValueError("至少需要提供 power、mode、temperature 或 speed 中的一个控制属性")
         result = await client.control_sequence(str(call.data["did"]), attrs)
         _LOGGER.info("FGCAir test_control did=%s attrs=%s result=%s", call.data["did"], attrs, result)
 

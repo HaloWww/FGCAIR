@@ -109,10 +109,6 @@ class FGCAirClient:
     async def ensure_session(self, force: bool = False) -> FGCAirSession:
         if force or not self.session or not self.session.token:
             return await self.login()
-        try:
-            await self.list_bindings(refresh=False)
-        except FGCAirAuthError:
-            return await self.login()
         return self.session
 
     async def list_bindings(self, refresh: bool = True) -> list[dict[str, Any]]:

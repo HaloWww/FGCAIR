@@ -7,6 +7,7 @@ API_HOST = "api.fgcawx.com"
 SITE_HOST = "site.fgcawx.com"
 
 CONF_SELECTED_DIDS = "selected_dids"
+CONF_DEVICES = "devices"
 CONF_AUTO_BIND_CAPTURED = "auto_bind_captured"
 CONF_TEMP_SOURCE_ENTITY_ID = "temp_source_entity_id"
 

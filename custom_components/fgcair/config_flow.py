@@ -9,7 +9,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import selector
 
 from .api import FGCAirAuthError, FGCAirClient, FGCAirError, indoor_devices, indoor_index
-from .const import CONF_AUTO_BIND_CAPTURED, CONF_SELECTED_DIDS, DOMAIN
+from .const import CONF_AUTO_BIND_CAPTURED, CONF_DEVICES, CONF_SELECTED_DIDS, DOMAIN
 
 
 class FGCAirConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -75,7 +75,7 @@ class FGCAirConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 return self.async_create_entry(
                     title=f"FGCAir {self._data['username']}",
-                    data={**self._data, CONF_SELECTED_DIDS: selected},
+                    data={**self._data, CONF_DEVICES: self._devices, CONF_SELECTED_DIDS: selected},
                 )
 
         schema = vol.Schema(
