@@ -12,7 +12,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dis
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import FGCAirClient, indoor_index, merge_state_cache, state_attrs_from_cache
-from .const import CONF_SELECTED_DIDS, CONF_TEMP_SOURCE_DID, DOMAIN, FAN_TO_SPEED, MODE_TO_HVAC, SIGNAL_STATE_UPDATED, SPEED_TO_FAN
+from .const import CONF_SELECTED_DIDS, CONF_TEMP_SOURCE_ENTITY_ID, DOMAIN, FAN_TO_SPEED, MODE_TO_HVAC, SIGNAL_STATE_UPDATED, SPEED_TO_FAN
 
 POWER_PREFIX = "Power_indoor_PK"
 MODE_PREFIX = "Mode_indoor_PK"
@@ -111,7 +111,7 @@ class FGCAirClimate(ClimateEntity):
         await self._save_attrs(self._default_attrs())
 
     def _handle_state_updated(self, did: str) -> None:
-        if did not in (self.did, self._temp_source_did):
+        if did != self.did:
             return
         cached = state_attrs_from_cache(self._cache, self.did)
         merged = self._default_attrs()
@@ -121,9 +121,6 @@ class FGCAirClimate(ClimateEntity):
 
     async def async_update(self) -> None:
         await self._refresh_device(self.did)
-        temp_source_did = self._temp_source_did
-        if temp_source_did != self.did:
-            await self._refresh_device(temp_source_did)
         cached = state_attrs_from_cache(self._cache, self.did)
         merged = self._default_attrs()
         merged.update(cached)
@@ -149,10 +146,10 @@ class FGCAirClimate(ClimateEntity):
             async_dispatcher_send(self.hass, SIGNAL_STATE_UPDATED, did)
 
     @property
-    def _temp_source_did(self) -> str:
+    def _temp_source_entity_id(self) -> str | None:
         entry = self._cache.get(self.did, {}) if isinstance(self._cache, dict) else {}
-        source = entry.get(CONF_TEMP_SOURCE_DID) if isinstance(entry, dict) else None
-        return str(source or self.did)
+        source = entry.get(CONF_TEMP_SOURCE_ENTITY_ID) if isinstance(entry, dict) else None
+        return str(source) if source else None
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -169,10 +166,20 @@ class FGCAirClimate(ClimateEntity):
 
     @property
     def current_temperature(self) -> float | None:
-        source_attrs = state_attrs_from_cache(self._cache, self._temp_source_did)
-        value = source_attrs.get(_first_key(source_attrs, ROOM_TEMP_PREFIX, self.pk_index))
-        if value is None:
-            value = self._attrs.get(_first_key(self._attrs, ROOM_TEMP_PREFIX, self.pk_index))
+        source_entity_id = self._temp_source_entity_id
+        if source_entity_id:
+            state = self.hass.states.get(source_entity_id)
+            if state:
+                raw_value = state.attributes.get("current_temperature") if source_entity_id.startswith("climate.") else state.state
+                try:
+                    value = float(raw_value)
+                except (TypeError, ValueError):
+                    _LOGGER.debug("Temperature source %s has non-numeric temperature %s", source_entity_id, raw_value)
+                else:
+                    if state.attributes.get("unit_of_measurement") == UnitOfTemperature.FAHRENHEIT:
+                        return round((value - 32) * 5 / 9, 1)
+                    return value
+        value = self._attrs.get(_first_key(self._attrs, ROOM_TEMP_PREFIX, self.pk_index))
         return round(value * 0.5 - 75, 1) if isinstance(value, (int, float)) else None
 
     @property

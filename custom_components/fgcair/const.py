@@ -8,18 +8,9 @@ SITE_HOST = "site.fgcawx.com"
 
 CONF_SELECTED_DIDS = "selected_dids"
 CONF_AUTO_BIND_CAPTURED = "auto_bind_captured"
-CONF_TEMP_SOURCE_DID = "temp_source_did"
+CONF_TEMP_SOURCE_ENTITY_ID = "temp_source_entity_id"
 
-PLATFORMS = ["climate", "fan", "select", "switch"]
-
-MODE_TO_LABEL = {
-    0: "自动",
-    1: "制冷",
-    2: "除湿",
-    3: "通风",
-    4: "制热",
-}
-LABEL_TO_MODE = {value: key for key, value in MODE_TO_LABEL.items()}
+PLATFORMS = ["climate", "select"]
 
 MODE_TO_HVAC = {
     0: "heat_cool",
