@@ -26,7 +26,7 @@ config/custom_components/fgcair
 
 本集成创建标准 `climate` 实体。安装并配置后，在 Home Assistant 的 HomeKit Bridge 集成中选择 `climate` 实体即可桥接到 HomeKit。
 
-项目使用 `bigmoby/fglair_for_homeassistant` 的 `FGLair_logo.png` 作为图标，并同步到 `custom_components/fgcair/icons/icon.png` 与 `logo.png`。
+项目使用 `bigmoby/fglair_for_homeassistant` 的 `FGLair_logo.png` 作为图标，并按 Home Assistant 官方自定义集成品牌图规范同步到 `custom_components/fgcair/brand/icon.png` 与 `logo.png`。
 
 ## Token
 
