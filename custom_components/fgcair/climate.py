@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.climate import ClimateEntity, ClimateEntityFeature, HVACMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import FGCAirClient, indoor_index, merge_state_cache, state_attrs_from_cache
-from .const import CONF_SELECTED_DIDS, DOMAIN, FAN_TO_SPEED, MODE_TO_HVAC, SPEED_TO_FAN
+from .const import CONF_SELECTED_DIDS, CONF_TEMP_SOURCE_DID, DOMAIN, FAN_TO_SPEED, MODE_TO_HVAC, SIGNAL_STATE_UPDATED, SPEED_TO_FAN
 
 POWER_PREFIX = "Power_indoor_PK"
 MODE_PREFIX = "Mode_indoor_PK"
@@ -24,6 +26,7 @@ DEFAULT_SPEED = 0
 DEFAULT_TEMP = 26
 TEMP_STEP = 0.5
 _LOGGER = logging.getLogger(__name__)
+SCAN_INTERVAL = timedelta(seconds=15)
 
 SUPPORTED_FEATURES = ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.FAN_MODE
 if hasattr(ClimateEntityFeature, "TURN_ON"):
@@ -51,7 +54,7 @@ def _first_key(attrs: dict[str, Any], prefix: str, pk_index: int) -> str:
 class FGCAirClimate(ClimateEntity):
     _attr_has_entity_name = True
     _attr_supported_features = SUPPORTED_FEATURES
-    _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT_COOL, HVACMode.COOL, HVACMode.DRY, HVACMode.FAN_ONLY, HVACMode.HEAT]
+    _attr_hvac_modes = [HVACMode.OFF, HVACMode.COOL, HVACMode.DRY, HVACMode.FAN_ONLY, HVACMode.HEAT, HVACMode.HEAT_COOL]
     _attr_fan_modes = list(FAN_TO_SPEED.keys())
     _attr_min_temp = 18
     _attr_max_temp = 30
@@ -98,29 +101,58 @@ class FGCAirClimate(ClimateEntity):
         self._attrs.update(attrs)
 
     async def async_added_to_hass(self) -> None:
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, SIGNAL_STATE_UPDATED, self._handle_state_updated)
+        )
         cached = state_attrs_from_cache(self._cache, self.did)
         if cached:
             self._attrs.update(cached)
             return
         await self._save_attrs(self._default_attrs())
 
-    async def async_update(self) -> None:
-        query_key = f"{QUERY_PREFIX}{self.pk_index}"
-        try:
-            await self._client.control(self.did, {query_key: True})
-            latest = await self._client.latest(self.did)
-        except Exception:
-            latest = {}
-        attrs = latest.get("attr", {}) if isinstance(latest, dict) else {}
-        if isinstance(attrs, dict) and attrs:
-            merged = self._default_attrs()
-            merged.update(attrs)
-            self._attrs = merged
+    def _handle_state_updated(self, did: str) -> None:
+        if did not in (self.did, self._temp_source_did):
             return
         cached = state_attrs_from_cache(self._cache, self.did)
         merged = self._default_attrs()
         merged.update(cached)
         self._attrs = merged
+        self.async_write_ha_state()
+
+    async def async_update(self) -> None:
+        await self._refresh_device(self.did)
+        temp_source_did = self._temp_source_did
+        if temp_source_did != self.did:
+            await self._refresh_device(temp_source_did)
+        cached = state_attrs_from_cache(self._cache, self.did)
+        merged = self._default_attrs()
+        merged.update(cached)
+        self._attrs = merged
+
+    async def _refresh_device(self, did: str) -> None:
+        query_key = f"{QUERY_PREFIX}{self.pk_index}"
+        try:
+            await self._client.control(did, {query_key: True})
+            latest = await self._client.latest(did)
+        except Exception:
+            _LOGGER.debug("Unable to refresh FGCAir latest data did=%s", did, exc_info=True)
+            return
+        attrs = latest.get("attr", {}) if isinstance(latest, dict) else {}
+        if isinstance(attrs, dict) and attrs:
+            data = self.hass.data[DOMAIN][self.entry.entry_id]
+            data["state_cache"] = merge_state_cache(
+                data["state_cache"],
+                {"did": did},
+                attrs,
+            )
+            await data["store"].async_save(data["state_cache"])
+            async_dispatcher_send(self.hass, SIGNAL_STATE_UPDATED, did)
+
+    @property
+    def _temp_source_did(self) -> str:
+        entry = self._cache.get(self.did, {}) if isinstance(self._cache, dict) else {}
+        source = entry.get(CONF_TEMP_SOURCE_DID) if isinstance(entry, dict) else None
+        return str(source or self.did)
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -137,7 +169,10 @@ class FGCAirClimate(ClimateEntity):
 
     @property
     def current_temperature(self) -> float | None:
-        value = self._attrs.get(_first_key(self._attrs, ROOM_TEMP_PREFIX, self.pk_index))
+        source_attrs = state_attrs_from_cache(self._cache, self._temp_source_did)
+        value = source_attrs.get(_first_key(source_attrs, ROOM_TEMP_PREFIX, self.pk_index))
+        if value is None:
+            value = self._attrs.get(_first_key(self._attrs, ROOM_TEMP_PREFIX, self.pk_index))
         return round(value * 0.5 - 75, 1) if isinstance(value, (int, float)) else None
 
     @property
@@ -210,4 +245,5 @@ class FGCAirClimate(ClimateEntity):
         _LOGGER.info("Sending FGCAir climate control sequence did=%s attrs=%s", self.did, attrs)
         await self._client.control_sequence(self.did, attrs)
         await self._save_attrs(attrs)
+        async_dispatcher_send(self.hass, SIGNAL_STATE_UPDATED, self.did)
         self.async_write_ha_state()
