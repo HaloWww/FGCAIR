@@ -193,7 +193,7 @@ class FGCAirClimate(ClimateEntity):
             )
 
     def _handle_temp_source_changed(self, event: Any) -> None:
-        self.async_write_ha_state()
+        self.hass.loop.call_soon_threadsafe(self.async_write_ha_state)
 
     async def async_will_remove_from_hass(self) -> None:
         if self._remove_temp_source_listener:
