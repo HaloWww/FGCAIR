@@ -40,10 +40,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         data = hass.data[DOMAIN][entry.entry_id]
         data["state_cache"] = merge_state_cache(data["state_cache"], device, attrs)  # type: ignore[arg-type]
         await data["store"].async_save(data["state_cache"])
+        _LOGGER.debug("FGCAir MQTT state update did=%s attrs=%s", did, attrs)
         async_dispatcher_send(hass, SIGNAL_STATE_UPDATED, did)
 
     client.set_ws_message_callback(handle_ws_update)
-    await client.start_ws_listener(list(entry.data.get(CONF_SELECTED_DIDS, [])), update_interval)
+    cached_devices = [device for device in entry.data.get(CONF_DEVICES, []) if isinstance(device, dict)]
+    await client.start_ws_listener(list(entry.data.get(CONF_SELECTED_DIDS, [])), update_interval, cached_devices)
 
     async def refresh_token(call: ServiceCall) -> None:
         new_session = await client.ensure_session(force=True)

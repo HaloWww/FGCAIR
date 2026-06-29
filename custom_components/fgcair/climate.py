@@ -62,6 +62,7 @@ def _first_key(attrs: dict[str, Any], prefix: str, pk_index: int) -> str:
 class FGCAirClimate(ClimateEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:air-conditioner"
+    _attr_force_update = True
     _attr_supported_features = SUPPORTED_FEATURES
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.COOL, HVACMode.HEAT, HVACMode.DRY]
     _attr_fan_modes = list(FAN_TO_SPEED.keys())

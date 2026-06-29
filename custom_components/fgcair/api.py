@@ -101,6 +101,7 @@ class FGCAirClient:
         self._mqtt_client: Any | None = None
         self._mqtt_loop: asyncio.AbstractEventLoop | None = None
         self._mqtt_devices: list[dict[str, Any]] = []
+        self._mqtt_cached_devices: list[dict[str, Any]] = []
         self._mqtt_update_interval = 60
 
     async def _request(self, *args: Any, **kwargs: Any) -> Any:
@@ -145,15 +146,26 @@ class FGCAirClient:
     def set_ws_message_callback(self, callback: WsMessageCallback) -> None:
         self._ws_message_callback = callback
 
-    async def start_ws_listener(self, dids: list[str], update_interval: int = 60) -> None:
-        await self.start_mqtt_listener(dids, update_interval)
+    async def start_ws_listener(
+        self,
+        dids: list[str],
+        update_interval: int = 60,
+        cached_devices: list[dict[str, Any]] | None = None,
+    ) -> None:
+        await self.start_mqtt_listener(dids, update_interval, cached_devices)
 
     async def stop_ws_listener(self) -> None:
         await self.stop_mqtt_listener()
 
-    async def start_mqtt_listener(self, dids: list[str], update_interval: int = 60) -> None:
+    async def start_mqtt_listener(
+        self,
+        dids: list[str],
+        update_interval: int = 60,
+        cached_devices: list[dict[str, Any]] | None = None,
+    ) -> None:
         self._ws_subscribed_dids = set(dids)
         self._mqtt_update_interval = max(10, int(update_interval))
+        self._mqtt_cached_devices = cached_devices or []
         if self._mqtt_task and not self._mqtt_task.done():
             return
         self._mqtt_loop = asyncio.get_running_loop()
@@ -184,7 +196,7 @@ class FGCAirClient:
                 await self.ensure_session()
                 if not self.session:
                     raise FGCAirAuthError("尚未登录")
-                bindings = await self.list_bindings(refresh=False)
+                bindings = self._mqtt_cached_devices or await self.list_bindings(refresh=False)
                 selected = self._ws_subscribed_dids
                 devices = [device for device in bindings if str(device.get("did")) in selected]
                 if not devices:
@@ -242,8 +254,8 @@ class FGCAirClient:
             if not device or not device.get("did"):
                 continue
             callback = self._ws_message_callback(str(device["did"]), attrs)
-            asyncio.run_coroutine_threadsafe(callback, self._mqtt_loop)
-
+            future = asyncio.run_coroutine_threadsafe(callback, self._mqtt_loop)
+            future.add_done_callback(_log_mqtt_callback_error)
     async def bind_captured_gateway(self) -> Any:
         await self.ensure_session()
         if not self.session:
@@ -292,6 +304,13 @@ class FGCAirClient:
         if not self.session:
             raise FGCAirAuthError("尚未登录")
         return await self._request("GET", f"/app/devdata/{did}/latest", token=self.session.token)
+
+
+def _log_mqtt_callback_error(future: Any) -> None:
+    try:
+        future.result()
+    except Exception as exc:  # pragma: no cover - defensive logging for background MQTT callbacks.
+        _LOGGER.warning("FGCAir MQTT state callback failed: %s", exc)
 
 
 def _mqtt_client_id(uid: str) -> str:
