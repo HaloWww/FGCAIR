@@ -196,9 +196,7 @@ class FGCAirClient:
                 await self.ensure_session()
                 if not self.session:
                     raise FGCAirAuthError("尚未登录")
-                bindings = self._mqtt_cached_devices if _gateway_device_for([], self._mqtt_cached_devices) else []
-                if not bindings:
-                    bindings = await self.list_bindings(refresh=False)
+                bindings = self._mqtt_cached_devices or await self.list_bindings(refresh=False)
                 selected = self._ws_subscribed_dids
                 devices = [device for device in bindings if str(device.get("did")) in selected]
                 if not devices:
@@ -225,7 +223,13 @@ class FGCAirClient:
         port = int(gateway.get("port_s") or 8883)
         gateway_did = str(gateway.get("did"))
         client_id = _mqtt_client_id(self.session.uid)
-        client = _build_mqtt_client(client_id, self.session.uid, self.session.token, self._handle_mqtt_message)
+        client = await asyncio.to_thread(
+            _build_mqtt_client,
+            client_id,
+            self.session.uid,
+            self.session.token,
+            self._handle_mqtt_message,
+        )
         self._mqtt_client = client
         _LOGGER.info("FGCAir MQTT connect host=%s port=%s client_id=%s gateway=%s", host, port, client_id, gateway_did)
         await asyncio.to_thread(_mqtt_connect, client, host, port, gateway_did, client_id)
@@ -370,6 +374,14 @@ def _gateway_device_for(devices: list[dict[str, Any]], bindings: list[dict[str, 
     for device in bindings:
         if device.get("type") == "gateway":
             return device
+    for device in devices:
+        if device.get("gw_did"):
+            return {
+                "did": device.get("gw_did"),
+                "host": device.get("host"),
+                "port_s": device.get("port_s"),
+                "type": "gateway",
+            }
     return None
 
 
