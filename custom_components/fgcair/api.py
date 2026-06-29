@@ -196,7 +196,9 @@ class FGCAirClient:
                 await self.ensure_session()
                 if not self.session:
                     raise FGCAirAuthError("尚未登录")
-                bindings = self._mqtt_cached_devices or await self.list_bindings(refresh=False)
+                bindings = self._mqtt_cached_devices if _gateway_device_for([], self._mqtt_cached_devices) else []
+                if not bindings:
+                    bindings = await self.list_bindings(refresh=False)
                 selected = self._ws_subscribed_dids
                 devices = [device for device in bindings if str(device.get("did")) in selected]
                 if not devices:
