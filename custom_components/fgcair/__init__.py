@@ -7,9 +7,10 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .api import FGCAirClient, FGCAirSession
-from .const import CONF_SELECTED_DIDS, DOMAIN, PLATFORMS
+from .api import FGCAirClient, FGCAirSession, merge_state_cache
+from .const import CONF_DEVICES, CONF_SELECTED_DIDS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL, DOMAIN, PLATFORMS, SIGNAL_STATE_UPDATED
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,9 +22,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     client = FGCAirClient(entry.data["username"], entry.data["password"], session)
     store: Store[dict] = Store(hass, 1, f"{DOMAIN}_{entry.entry_id}_state")
     state_cache = await store.async_load() or {}
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"client": client, "store": store, "state_cache": state_cache}
+    update_interval = int(entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL))
+    remove_update_listener = entry.add_update_listener(_async_update_options)
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        "client": client,
+        "store": store,
+        "state_cache": state_cache,
+        "remove_update_listener": remove_update_listener,
+    }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    device_map = {str(device.get("did")): device for device in entry.data.get(CONF_DEVICES, []) if isinstance(device, dict)}
+
+    async def handle_ws_update(did: str, attrs: dict[str, object]) -> None:
+        device = device_map.get(did) or {"did": did}
+        data = hass.data[DOMAIN][entry.entry_id]
+        data["state_cache"] = merge_state_cache(data["state_cache"], device, attrs)  # type: ignore[arg-type]
+        await data["store"].async_save(data["state_cache"])
+        async_dispatcher_send(hass, SIGNAL_STATE_UPDATED, did)
+
+    client.set_ws_message_callback(handle_ws_update)
+    await client.start_ws_listener(list(entry.data.get(CONF_SELECTED_DIDS, [])), update_interval)
 
     async def refresh_token(call: ServiceCall) -> None:
         new_session = await client.ensure_session(force=True)
@@ -71,7 +91,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if data and callable(data.get("remove_update_listener")):
+        data["remove_update_listener"]()
+    if data and isinstance(data.get("client"), FGCAirClient):
+        await data["client"].stop_ws_listener()
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     return unload_ok
+
+
+async def _async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)

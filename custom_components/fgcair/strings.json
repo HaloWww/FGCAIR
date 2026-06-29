@@ -27,6 +27,16 @@
       "already_configured": "该账号已经配置"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "FGCAir 设置",
+        "data": {
+          "update_interval": "数据更新间隔（秒）"
+        }
+      }
+    }
+  },
   "services": {
     "refresh_token": {
       "name": "刷新 token",

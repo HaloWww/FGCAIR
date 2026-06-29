@@ -86,6 +86,11 @@ class FGCAirTemperatureSourceSelect(SelectEntity):
             device_cache.pop(CONF_TEMP_SOURCE_ENTITY_ID, None)
         else:
             device_cache[CONF_TEMP_SOURCE_ENTITY_ID] = self._temperature_entity_options()[option]
+            room_temp = _temperature_from_state(self.hass.states.get(device_cache[CONF_TEMP_SOURCE_ENTITY_ID]))
+            if room_temp is not None:
+                attrs = device_cache.get("attrs", {}) if isinstance(device_cache.get("attrs"), dict) else {}
+                attrs["Roomtemp_indoor_PK4"] = round((room_temp + 75) * 2)
+                device_cache["attrs"] = attrs
         cache[self.did] = device_cache
         data["state_cache"] = cache
         await data["store"].async_save(cache)
@@ -120,3 +125,16 @@ def _is_numeric_state(value: Any) -> bool:
     except (TypeError, ValueError):
         return False
     return True
+
+
+def _temperature_from_state(state: Any) -> float | None:
+    if state is None:
+        return None
+    raw_value = state.attributes.get("current_temperature") if state.entity_id.startswith("climate.") else state.state
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+    if state.attributes.get("unit_of_measurement") == UnitOfTemperature.FAHRENHEIT:
+        return round((value - 32) * 5 / 9, 1)
+    return value

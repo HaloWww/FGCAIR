@@ -10,6 +10,8 @@ CONF_SELECTED_DIDS = "selected_dids"
 CONF_DEVICES = "devices"
 CONF_AUTO_BIND_CAPTURED = "auto_bind_captured"
 CONF_TEMP_SOURCE_ENTITY_ID = "temp_source_entity_id"
+CONF_UPDATE_INTERVAL = "update_interval"
+DEFAULT_UPDATE_INTERVAL = 60
 
 PLATFORMS = ["climate", "select"]
 

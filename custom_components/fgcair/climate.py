@@ -9,6 +9,7 @@ from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_state_change_event
 
 from .api import indoor_index, merge_state_cache, state_attrs_from_cache
 from .const import CONF_DEVICES, CONF_SELECTED_DIDS, CONF_TEMP_SOURCE_ENTITY_ID, DOMAIN, FAN_TO_SPEED, KNOWN_INDOOR_DIDS, MODE_TO_HVAC, SIGNAL_STATE_UPDATED, SPEED_TO_FAN
@@ -77,6 +78,8 @@ class FGCAirClimate(ClimateEntity):
         self.index = indoor_index(device) or 4
         self.pk_index = 4
         self._attrs: dict[str, Any] = self._default_attrs()
+        self._tracked_temp_source: str | None = None
+        self._remove_temp_source_listener = None
         self._attr_unique_id = f"fgcair_{self.did}"
         self._attr_name = f"室内机 {self.index}"
         self._attr_device_info = {
@@ -112,6 +115,7 @@ class FGCAirClimate(ClimateEntity):
         self.async_on_remove(
             async_dispatcher_connect(self.hass, SIGNAL_STATE_UPDATED, self._handle_state_updated)
         )
+        self._track_temp_source()
         cached = state_attrs_from_cache(self._cache, self.did)
         if cached:
             self._attrs.update(cached)
@@ -125,6 +129,7 @@ class FGCAirClimate(ClimateEntity):
         merged = self._default_attrs()
         merged.update(cached)
         self._attrs = merged
+        self._track_temp_source()
         self.hass.loop.call_soon_threadsafe(self.async_write_ha_state)
 
     async def async_update(self) -> None:
@@ -170,6 +175,29 @@ class FGCAirClimate(ClimateEntity):
                     return value
         value = self._attrs.get(_first_key(self._attrs, ROOM_TEMP_PREFIX, self.pk_index))
         return round(value * 0.5 - 75, 1) if isinstance(value, (int, float)) else None
+
+    def _track_temp_source(self) -> None:
+        source_entity_id = self._temp_source_entity_id
+        if source_entity_id == self._tracked_temp_source:
+            return
+        if self._remove_temp_source_listener:
+            self._remove_temp_source_listener()
+            self._remove_temp_source_listener = None
+        self._tracked_temp_source = source_entity_id
+        if source_entity_id:
+            self._remove_temp_source_listener = async_track_state_change_event(
+                self.hass,
+                [source_entity_id],
+                self._handle_temp_source_changed,
+            )
+
+    def _handle_temp_source_changed(self, event: Any) -> None:
+        self.async_write_ha_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        if self._remove_temp_source_listener:
+            self._remove_temp_source_listener()
+            self._remove_temp_source_listener = None
 
     @property
     def fan_mode(self) -> str | None:
