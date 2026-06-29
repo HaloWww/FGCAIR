@@ -205,3 +205,13 @@ home_assistant_url: <redacted_ha_url>
 custom_components/fgcair/brand/icon.png
 custom_components/fgcair/brand/logo.png
 ```
+
+## 支持项目
+
+这个集成是在实际设备调试和反复验证中慢慢做出来的。为了摸清 FGCAir 的控制和状态同步逻辑，开发过程中消耗了不少云端 token，也花了不少时间做抓包、验证和 HomeKit 适配。
+
+如果这个项目刚好帮你解决了问题，并且你愿意支持后续维护，可以随意打赏一点。完全自愿，不影响使用，也没有任何强制要求。
+
+| 微信 | 支付宝 |
+| --- | --- |
+| ![微信打赏](docs/assets/wechat-donation.jpeg) | ![支付宝打赏](docs/assets/alipay-donation.jpeg) |
