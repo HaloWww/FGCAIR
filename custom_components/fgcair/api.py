@@ -17,7 +17,7 @@ try:
 except ImportError:  # pragma: no cover - Home Assistant should provide paho via mqtt deps or custom install.
     mqtt = None  # type: ignore[assignment]
 
-from .const import API_BASE, API_HOST, APP_ID, SITE_HOST, KNOWN_INDOOR_DIDS
+from .const import API_BASE, API_HOST, APP_ID, INDOOR_MESH_PREFIX, SITE_HOST
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -262,16 +262,6 @@ class FGCAirClient:
             callback = self._ws_message_callback(str(device["did"]), attrs)
             future = asyncio.run_coroutine_threadsafe(callback, self._mqtt_loop)
             future.add_done_callback(_log_mqtt_callback_error)
-    async def bind_captured_gateway(self) -> Any:
-        await self.ensure_session()
-        if not self.session:
-            raise FGCAirAuthError("尚未登录")
-        return await self._request(
-            "POST",
-            "/app/bindings",
-            token=self.session.token,
-            body={"devices": [{"did": "9CEVveZCS9upwabSnRyUTW", "passcode": "ANFILBWOJF", "remark": ""}]},
-        )
 
     async def datapoint(self, product_key: str) -> dict[str, Any] | None:
         try:
@@ -421,15 +411,24 @@ def _parse_mqtt_state_payload(payload: bytes) -> dict[str, dict[str, Any]]:
 
 
 def indoor_index(device: dict[str, Any]) -> int | None:
-    did = device.get("did")
-    for index, known_did in KNOWN_INDOOR_DIDS.items():
-        if did == known_did:
-            return index
+    mesh_id = str(device.get("mesh_id") or device.get("mac") or "")
+    if len(mesh_id) >= 6 and mesh_id[-6:-2] == INDOOR_MESH_PREFIX:
+        try:
+            return int(mesh_id[-2:], 16) + 1
+        except ValueError:
+            return None
     return None
 
 
 def indoor_devices(devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [device for device in devices if indoor_index(device) is not None]
+    return [device for device in devices if _is_indoor_device(device)]
+
+
+def _is_indoor_device(device: dict[str, Any]) -> bool:
+    if indoor_index(device) is not None:
+        return True
+    product_name = str(device.get("product_name") or "")
+    return "室内机" in product_name
 
 
 def state_attrs_from_cache(cache: dict[str, Any], did: str) -> dict[str, Any]:

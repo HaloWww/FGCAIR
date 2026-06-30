@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 
 from .api import indoor_index, merge_state_cache, state_attrs_from_cache
-from .const import CONF_DEVICES, CONF_SELECTED_DIDS, CONF_TEMP_SOURCE_ENTITY_ID, DOMAIN, FAN_TO_SPEED, KNOWN_INDOOR_DIDS, MODE_TO_HVAC, SIGNAL_STATE_UPDATED, SPEED_TO_FAN
+from .const import CONF_DEVICES, CONF_SELECTED_DIDS, CONF_TEMP_SOURCE_ENTITY_ID, DOMAIN, FAN_TO_SPEED, MODE_TO_HVAC, SIGNAL_STATE_UPDATED, SPEED_TO_FAN
 
 POWER_PREFIX = "Power_indoor_PK"
 MODE_PREFIX = "Mode_indoor_PK"
@@ -45,11 +45,7 @@ def _configured_devices(entry: ConfigEntry) -> list[dict[str, Any]]:
     if isinstance(devices, list) and devices:
         return [device for device in devices if isinstance(device, dict)]
     selected = set(entry.data.get(CONF_SELECTED_DIDS, []))
-    return [
-        {"did": did, "product_name": "FGCAir 室内机", "mac": "", "dev_alias": ""}
-        for did in selected
-        if did in KNOWN_INDOOR_DIDS.values()
-    ]
+    return [{"did": did, "product_name": "FGCAir 室内机", "mac": "", "dev_alias": ""} for did in selected]
 
 
 def _first_key(attrs: dict[str, Any], prefix: str, pk_index: int) -> str:
@@ -76,13 +72,13 @@ class FGCAirClimate(ClimateEntity):
         self.entry = entry
         self.device = device
         self.did = str(device["did"])
-        self.index = indoor_index(device) or 4
+        self.index = indoor_index(device)
         self.pk_index = 4
         self._attrs: dict[str, Any] = self._default_attrs()
         self._tracked_temp_source: str | None = None
         self._remove_temp_source_listener = None
         self._attr_unique_id = f"fgcair_{self.did}"
-        self._attr_name = f"室内机 {self.index}"
+        self._attr_name = _device_name(device, self.index)
         self._attr_device_info = {
             "identifiers": {(DOMAIN, self.did)},
             "name": self._attr_name,
@@ -219,26 +215,26 @@ class FGCAirClimate(ClimateEntity):
             updates[f"{MODE_PREFIX}{self.pk_index}"] = hvac_to_mode[hvac_mode]
         if ATTR_TEMPERATURE not in kwargs:
             if updates:
-                await self._send_attrs(self._build_full_attrs(updates))
+                await self._send_attrs(updates)
             return
         temperature = max(18, min(30, round(float(kwargs[ATTR_TEMPERATURE]) / TEMP_STEP) * TEMP_STEP))
         updates[f"{TEMP_PREFIX}{self.pk_index}"] = temperature
-        await self._send_attrs(self._build_full_attrs(updates))
+        await self._send_attrs(updates)
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
-        attrs = self._build_full_attrs({
+        attrs = {
             f"{SPEED_PREFIX}{self.pk_index}": FAN_TO_SPEED[fan_mode],
-        })
+        }
         await self._send_attrs(attrs)
 
     async def async_turn_on(self) -> None:
-        attrs = self._build_full_attrs({
+        attrs = {
             f"{POWER_PREFIX}{self.pk_index}": True,
-        })
+        }
         await self._send_attrs(attrs)
 
     async def async_turn_off(self) -> None:
-        await self._send_attrs(self._build_full_attrs({f"{POWER_PREFIX}{self.pk_index}": False}))
+        await self._send_attrs({f"{POWER_PREFIX}{self.pk_index}": False})
 
     def _coerce_hvac_mode(self, hvac_mode: HVACMode | str) -> HVACMode:
         return hvac_mode if isinstance(hvac_mode, HVACMode) else HVACMode(hvac_mode)
@@ -249,25 +245,11 @@ class FGCAirClimate(ClimateEntity):
             return
         hvac_to_mode = {HVACMode.COOL: 1, HVACMode.DRY: 2, HVACMode.HEAT: 4}
         hvac_mode = hvac_mode if hvac_mode in hvac_to_mode else HVACMode.COOL
-        attrs = self._build_full_attrs({
+        attrs = {
             f"{POWER_PREFIX}{self.pk_index}": True,
             f"{MODE_PREFIX}{self.pk_index}": hvac_to_mode[hvac_mode],
-        })
-        await self._send_attrs(attrs)
-
-    def _build_full_attrs(self, updates: dict[str, Any]) -> dict[str, Any]:
-        power_key = f"{POWER_PREFIX}{self.pk_index}"
-        mode_key = f"{MODE_PREFIX}{self.pk_index}"
-        temp_key = f"{TEMP_PREFIX}{self.pk_index}"
-        speed_key = f"{SPEED_PREFIX}{self.pk_index}"
-        attrs = {
-            power_key: self._attrs.get(power_key, False),
-            mode_key: self._attrs.get(mode_key, DEFAULT_MODE),
-            temp_key: self._attrs.get(temp_key, DEFAULT_TEMP),
-            speed_key: self._attrs.get(speed_key, DEFAULT_SPEED),
         }
-        attrs.update(updates)
-        return attrs
+        await self._send_attrs(attrs)
 
     async def _send_attrs(self, attrs: dict[str, Any]) -> None:
         _LOGGER.info("Sending FGCAir climate control sequence did=%s attrs=%s", self.did, attrs)
@@ -275,3 +257,9 @@ class FGCAirClimate(ClimateEntity):
         await self._save_attrs(attrs)
         async_dispatcher_send(self.hass, SIGNAL_STATE_UPDATED, self.did)
         self.async_write_ha_state()
+
+
+def _device_name(device: dict[str, Any], index: int | None) -> str:
+    if index is not None:
+        return f"室内机 {index}"
+    return str(device.get("dev_alias") or device.get("product_name") or "FGCAir 室内机")

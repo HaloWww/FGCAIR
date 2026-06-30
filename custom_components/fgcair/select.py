@@ -10,7 +10,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dis
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import indoor_index
-from .const import CONF_DEVICES, CONF_SELECTED_DIDS, CONF_TEMP_SOURCE_ENTITY_ID, DOMAIN, KNOWN_INDOOR_DIDS, SIGNAL_STATE_UPDATED
+from .const import CONF_DEVICES, CONF_SELECTED_DIDS, CONF_TEMP_SOURCE_ENTITY_ID, DOMAIN, SIGNAL_STATE_UPDATED
 
 SELF_OPTION = "自身室温"
 TEMPERATURE_DEVICE_CLASSES = {"temperature"}
@@ -27,11 +27,7 @@ def _configured_devices(entry: ConfigEntry) -> list[dict[str, Any]]:
     if isinstance(devices, list) and devices:
         return [device for device in devices if isinstance(device, dict)]
     selected = set(entry.data.get(CONF_SELECTED_DIDS, []))
-    return [
-        {"did": did, "product_name": "FGCAir 室内机", "mac": "", "dev_alias": ""}
-        for did in selected
-        if did in KNOWN_INDOOR_DIDS.values()
-    ]
+    return [{"did": did, "product_name": "FGCAir 室内机", "mac": "", "dev_alias": ""} for did in selected]
 
 
 class FGCAirTemperatureSourceSelect(SelectEntity):
@@ -44,12 +40,13 @@ class FGCAirTemperatureSourceSelect(SelectEntity):
         self.entry = entry
         self.device = device
         self.did = str(device["did"])
-        self.index = indoor_index(device) or 4
+        self.index = indoor_index(device)
         self._attr_unique_id = f"fgcair_{self.did}_temperature_source"
         self._attr_name = "当前室温来源"
+        device_name = _device_name(device, self.index)
         self._attr_device_info = {
             "identifiers": {(DOMAIN, self.did)},
-            "name": f"室内机 {self.index}",
+            "name": device_name,
             "manufacturer": "FGCAir",
             "model": device.get("product_name"),
         }
@@ -138,3 +135,9 @@ def _temperature_from_state(state: Any) -> float | None:
     if state.attributes.get("unit_of_measurement") == UnitOfTemperature.FAHRENHEIT:
         return round((value - 32) * 5 / 9, 1)
     return value
+
+
+def _device_name(device: dict[str, Any], index: int | None) -> str:
+    if index is not None:
+        return f"室内机 {index}"
+    return str(device.get("dev_alias") or device.get("product_name") or "FGCAir 室内机")

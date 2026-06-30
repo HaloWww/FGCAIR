@@ -9,7 +9,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import selector
 
 from .api import FGCAirAuthError, FGCAirClient, FGCAirError, indoor_devices, indoor_index
-from .const import CONF_AUTO_BIND_CAPTURED, CONF_DEVICES, CONF_SELECTED_DIDS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL, DOMAIN
+from .const import CONF_DEVICES, CONF_SELECTED_DIDS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL, DOMAIN
 
 
 class FGCAirConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -29,8 +29,6 @@ class FGCAirConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             client = FGCAirClient(username, user_input[CONF_PASSWORD])
             try:
                 session = await client.login()
-                if user_input.get(CONF_AUTO_BIND_CAPTURED):
-                    await client.bind_captured_gateway()
                 devices = indoor_devices(await client.list_bindings())
             except FGCAirAuthError:
                 errors["base"] = "invalid_auth"
@@ -55,7 +53,6 @@ class FGCAirConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             {
                 vol.Required(CONF_USERNAME): str,
                 vol.Required(CONF_PASSWORD): str,
-                vol.Optional(CONF_AUTO_BIND_CAPTURED, default=True): bool,
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)

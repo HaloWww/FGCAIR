@@ -8,12 +8,11 @@ SITE_HOST = "site.fgcawx.com"
 
 CONF_SELECTED_DIDS = "selected_dids"
 CONF_DEVICES = "devices"
-CONF_AUTO_BIND_CAPTURED = "auto_bind_captured"
 CONF_TEMP_SOURCE_ENTITY_ID = "temp_source_entity_id"
 CONF_UPDATE_INTERVAL = "update_interval"
 DEFAULT_UPDATE_INTERVAL = 60
 
-PLATFORMS = ["climate", "select"]
+PLATFORMS = ["climate", "fan", "select"]
 
 MODE_TO_HVAC = {
     0: "heat_cool",
@@ -34,9 +33,4 @@ SPEED_TO_FAN = {
 }
 FAN_TO_SPEED = {value: key for key, value in SPEED_TO_FAN.items()}
 
-KNOWN_INDOOR_DIDS = {
-    1: "YSNtVwL8Rs4UmGk7cXXAoC",
-    2: "YkkWf6qcA8V5wEm2U9hVsr",
-    3: "pW2wbCa55vsjLY5DdKrbYt",
-    4: "tV4LPSPTMd22afK8PBTvrK",
-}
+INDOOR_MESH_PREFIX = "0400"

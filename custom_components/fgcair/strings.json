@@ -6,8 +6,7 @@
         "description": "输入 FGCAir/机智云账号密码。登录后会获取 token 并保存到 Home Assistant 配置项中。",
         "data": {
           "username": "用户名/手机号",
-          "password": "密码",
-          "auto_bind_captured": "自动绑定抓包中的网关"
+          "password": "密码"
         }
       },
       "select_devices": {
