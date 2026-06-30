@@ -131,9 +131,12 @@ def _patch_homekit_climate_fan_modes() -> bool:
         if key not in type_thermostats.PRE_DEFINED_FAN_MODES:
             type_thermostats.PRE_DEFINED_FAN_MODES.add(key)
             changed = True
-        if speed > 0 and key not in type_thermostats.ORDERED_FAN_SPEEDS:
-            type_thermostats.ORDERED_FAN_SPEEDS.append(key)
-            changed = True
+    ordered_speeds = [SPEED_TO_FAN[speed].lower() for speed in range(1, 7)] + [SPEED_TO_FAN[0].lower()]
+    for key in ordered_speeds:
+        if key in type_thermostats.ORDERED_FAN_SPEEDS:
+            type_thermostats.ORDERED_FAN_SPEEDS.remove(key)
+        type_thermostats.ORDERED_FAN_SPEEDS.append(key)
+        changed = True
     if changed:
         _LOGGER.info("FGCAir HomeKit climate fan modes enabled: %s", list(SPEED_TO_FAN.values()))
     return changed
