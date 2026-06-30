@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+from typing import Any
 
 import voluptuous as vol
 
@@ -15,8 +17,15 @@ from .const import CONF_DEVICES, CONF_SELECTED_DIDS, CONF_UPDATE_INTERVAL, DEFAU
 _LOGGER = logging.getLogger(__name__)
 
 
+async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
+    if _patch_homekit_climate_fan_modes():
+        hass.async_create_task(_async_reload_homekit_after_patch(hass))
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    _patch_homekit_climate_fan_modes()
+    if _patch_homekit_climate_fan_modes():
+        hass.async_create_task(_async_reload_homekit_after_patch(hass))
     session = None
     if entry.data.get("uid") and entry.data.get("token"):
         session = FGCAirSession(entry.data["uid"], entry.data["token"], entry.data.get("expire_at"))
@@ -109,12 +118,12 @@ async def _async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-def _patch_homekit_climate_fan_modes() -> None:
+def _patch_homekit_climate_fan_modes() -> bool:
     try:
         from homeassistant.components.homekit import type_thermostats
     except (ImportError, RuntimeError) as exc:
         _LOGGER.debug("FGCAir HomeKit climate fan mode patch skipped: %s", exc)
-        return
+        return False
 
     changed = False
     for speed, fan_mode in SPEED_TO_FAN.items():
@@ -127,3 +136,15 @@ def _patch_homekit_climate_fan_modes() -> None:
             changed = True
     if changed:
         _LOGGER.info("FGCAir HomeKit climate fan modes enabled: %s", list(SPEED_TO_FAN.values()))
+    return changed
+
+
+async def _async_reload_homekit_after_patch(hass: HomeAssistant) -> None:
+    key = f"{DOMAIN}_homekit_reloaded"
+    if hass.data.get(key):
+        return
+    hass.data[key] = True
+    await asyncio.sleep(15)
+    for entry in hass.config_entries.async_entries("homekit"):
+        await hass.config_entries.async_reload(entry.entry_id)
+        _LOGGER.info("FGCAir reloaded HomeKit bridge %s after enabling climate fan modes", entry.entry_id)
