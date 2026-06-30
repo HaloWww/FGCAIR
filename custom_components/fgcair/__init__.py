@@ -10,12 +10,13 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .api import FGCAirClient, FGCAirSession, merge_state_cache
-from .const import CONF_DEVICES, CONF_SELECTED_DIDS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL, DOMAIN, PLATFORMS, SIGNAL_STATE_UPDATED
+from .const import CONF_DEVICES, CONF_SELECTED_DIDS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL, DOMAIN, PLATFORMS, SIGNAL_STATE_UPDATED, SPEED_TO_FAN
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    _patch_homekit_climate_fan_modes()
     session = None
     if entry.data.get("uid") and entry.data.get("token"):
         session = FGCAirSession(entry.data["uid"], entry.data["token"], entry.data.get("expire_at"))
@@ -106,3 +107,23 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def _async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+def _patch_homekit_climate_fan_modes() -> None:
+    try:
+        from homeassistant.components.homekit import type_thermostats
+    except (ImportError, RuntimeError) as exc:
+        _LOGGER.debug("FGCAir HomeKit climate fan mode patch skipped: %s", exc)
+        return
+
+    changed = False
+    for speed, fan_mode in SPEED_TO_FAN.items():
+        key = fan_mode.lower()
+        if key not in type_thermostats.PRE_DEFINED_FAN_MODES:
+            type_thermostats.PRE_DEFINED_FAN_MODES.add(key)
+            changed = True
+        if speed > 0 and key not in type_thermostats.ORDERED_FAN_SPEEDS:
+            type_thermostats.ORDERED_FAN_SPEEDS.append(key)
+            changed = True
+    if changed:
+        _LOGGER.info("FGCAir HomeKit climate fan modes enabled: %s", list(SPEED_TO_FAN.values()))
