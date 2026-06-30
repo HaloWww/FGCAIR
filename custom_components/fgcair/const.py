@@ -12,7 +12,7 @@ CONF_TEMP_SOURCE_ENTITY_ID = "temp_source_entity_id"
 CONF_UPDATE_INTERVAL = "update_interval"
 DEFAULT_UPDATE_INTERVAL = 60
 
-PLATFORMS = ["climate", "fan", "select"]
+PLATFORMS = ["climate", "select"]
 
 MODE_TO_HVAC = {
     0: "heat_cool",
