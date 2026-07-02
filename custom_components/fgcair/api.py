@@ -399,8 +399,8 @@ def _parse_mqtt_state_payload(payload: bytes) -> dict[str, dict[str, Any]]:
     power = body[9]
     room_temp = body[12]
     target_temp = body[10] / 2 if 32 <= body[10] <= 60 else None
-    if power in (0, 1):
-        attrs["Power_indoor_PK4"] = power == 1
+    if power in (0, 1, 0x80, 0x81):
+        attrs["Power_indoor_PK4"] = bool(power & 0x01)
     if target_temp is not None:
         attrs["Temp_indoor_PK4"] = target_temp
     if room_temp:
