@@ -20,6 +20,7 @@ except ImportError:  # pragma: no cover - Home Assistant should provide paho via
 from .const import API_BASE, API_HOST, APP_ID, INDOOR_MESH_PREFIX, SITE_HOST
 
 _LOGGER = logging.getLogger(__name__)
+_MQTT_CLIENT_ID_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 
 class FGCAirError(Exception):
@@ -310,7 +311,15 @@ def _log_mqtt_callback_error(future: Any) -> None:
 
 
 def _mqtt_client_id(uid: str) -> str:
-    return f"usr{uid[:20]}"
+    cleaned = "".join(ch for ch in uid if ch in _MQTT_CLIENT_ID_ALPHABET)
+    if cleaned and all(ch in "0123456789abcdefABCDEF" for ch in cleaned) and len(cleaned) >= 16:
+        value = int(cleaned, 16)
+        suffix = ""
+        while value:
+            value, index = divmod(value, len(_MQTT_CLIENT_ID_ALPHABET))
+            suffix = _MQTT_CLIENT_ID_ALPHABET[index] + suffix
+        cleaned = suffix or "0"
+    return f"usr{cleaned[-20:].rjust(20, '0')}"
 
 
 def _build_mqtt_client(client_id: str, uid: str, token: str, on_message: Callable[[Any, Any, Any], None]) -> Any:
