@@ -392,7 +392,11 @@ def _mqtt_query_payload(device: dict[str, Any]) -> bytes | None:
 
 
 def _parse_mqtt_state_payload(payload: bytes) -> dict[str, dict[str, Any]]:
-    if len(payload) < 33 or payload[:4] != b"\x00\x00\x00\x03" or payload[4:6] != b"\xad\x01":
+    if len(payload) < 33 or payload[:4] != b"\x00\x00\x00\x03":
+        return {}
+    if payload[4] == 0x28:
+        return _parse_mqtt_short_payload(payload)
+    if payload[4:6] != b"\xad\x01":
         return {}
     mesh_len = payload[12]
     mesh_start = 13
@@ -405,9 +409,16 @@ def _parse_mqtt_state_payload(payload: bytes) -> dict[str, dict[str, Any]]:
         return {}
     body = payload[mesh_end:]
     attrs: dict[str, Any] = {}
+    mode_flags = body[8]
     power = body[9]
     room_temp = body[12]
     target_temp = body[10] / 2 if 32 <= body[10] <= 60 else None
+    mode = _mqtt_mode_from_flags(mode_flags)
+    speed = body[7] * 2 + (1 if mode_flags & 0x80 else 0)
+    if mode is not None:
+        attrs["Mode_indoor_PK4"] = mode
+    if 0 <= speed <= 6:
+        attrs["Speed_indoor_PK4"] = speed
     if power in (0, 1, 0x80, 0x81):
         attrs["Power_indoor_PK4"] = bool(power & 0x01)
     if target_temp is not None:
@@ -417,6 +428,33 @@ def _parse_mqtt_state_payload(payload: bytes) -> dict[str, dict[str, Any]]:
     if not attrs:
         return {}
     return {mesh_id: attrs}
+
+
+def _parse_mqtt_short_payload(payload: bytes) -> dict[str, dict[str, Any]]:
+    if len(payload) < 38 or payload[11] != 0x12:
+        return {}
+    try:
+        mesh_id = payload[12:30].decode("ascii")
+    except UnicodeDecodeError:
+        return {}
+    selector = payload[35]
+    value = payload[37]
+    attrs: dict[str, Any] = {}
+    if selector == 0x08:
+        mode = _mqtt_mode_from_code(value)
+        if mode is not None:
+            attrs["Mode_indoor_PK4"] = mode
+    elif selector == 0x10 and 0 <= value <= 6:
+        attrs["Speed_indoor_PK4"] = value
+    return {mesh_id: attrs} if attrs else {}
+
+
+def _mqtt_mode_from_flags(mode_flags: int) -> int | None:
+    return _mqtt_mode_from_code((mode_flags & 0x70) >> 4)
+
+
+def _mqtt_mode_from_code(mode_code: int) -> int | None:
+    return mode_code if mode_code in (1, 2, 4) else None
 
 
 def indoor_index(device: dict[str, Any]) -> int | None:
