@@ -18,13 +18,13 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
-    if _patch_homekit_climate_fan_modes():
+    if _patch_homekit_climate():
         hass.async_create_task(_async_reload_homekit_after_patch(hass))
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    if _patch_homekit_climate_fan_modes():
+    if _patch_homekit_climate():
         hass.async_create_task(_async_reload_homekit_after_patch(hass))
     session = None
     if entry.data.get("uid") and entry.data.get("token"):
@@ -118,6 +118,12 @@ async def _async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None
     await hass.config_entries.async_reload(entry.entry_id)
 
 
+def _patch_homekit_climate() -> bool:
+    fan_modes_changed = _patch_homekit_climate_fan_modes()
+    modes_changed = _patch_homekit_climate_modes()
+    return fan_modes_changed or modes_changed
+
+
 def _patch_homekit_climate_fan_modes() -> bool:
     try:
         from homeassistant.components.homekit import type_thermostats
@@ -140,6 +146,59 @@ def _patch_homekit_climate_fan_modes() -> bool:
     if changed:
         _LOGGER.info("FGCAir HomeKit climate fan modes enabled: %s", list(SPEED_TO_FAN.values()))
     return changed
+
+
+def _patch_homekit_climate_modes() -> bool:
+    try:
+        from homeassistant.components.homekit import type_thermostats
+        from homeassistant.helpers import entity_registry as er
+    except (ImportError, RuntimeError) as exc:
+        _LOGGER.debug("FGCAir HomeKit climate mode patch skipped: %s", exc)
+        return False
+
+    thermostat_cls = type_thermostats.Thermostat
+    if getattr(thermostat_cls, "_fgcair_dry_auto_patch", False):
+        return False
+
+    dry_auto_entities: set[str] = set()
+    original_configure_hvac_modes = thermostat_cls._configure_hvac_modes
+    original_hk_hvac_mode_from_state = type_thermostats._hk_hvac_mode_from_state
+
+    def is_fgcair_entity(self: Any, entity_id: str) -> bool:
+        entity_entry = er.async_get(self.hass).async_get(entity_id)
+        return entity_entry is not None and entity_entry.platform == DOMAIN
+
+    def fgcair_configure_hvac_modes(self: Any, state: Any) -> None:
+        raw_modes = state.attributes.get(type_thermostats.ATTR_HVAC_MODES) or type_thermostats.DEFAULT_HVAC_MODES
+        hvac_modes = set(raw_modes)
+        if is_fgcair_entity(self, state.entity_id) and type_thermostats.HVACMode.DRY in hvac_modes:
+            dry_auto_entities.add(state.entity_id)
+            mapping = {}
+            for homekit_mode, hass_mode in (
+                (type_thermostats.HC_HEAT_COOL_OFF, type_thermostats.HVACMode.OFF),
+                (type_thermostats.HC_HEAT_COOL_HEAT, type_thermostats.HVACMode.HEAT),
+                (type_thermostats.HC_HEAT_COOL_COOL, type_thermostats.HVACMode.COOL),
+                (type_thermostats.HC_HEAT_COOL_AUTO, type_thermostats.HVACMode.DRY),
+            ):
+                if hass_mode in hvac_modes:
+                    mapping[homekit_mode] = hass_mode
+            self.hc_homekit_to_hass = mapping
+            self.hc_hass_to_homekit = {hass_mode: homekit_mode for homekit_mode, hass_mode in mapping.items()}
+            return
+
+        dry_auto_entities.discard(state.entity_id)
+        original_configure_hvac_modes(self, state)
+
+    def fgcair_hk_hvac_mode_from_state(state: Any) -> int | None:
+        if state.entity_id in dry_auto_entities and state.state == type_thermostats.HVACMode.DRY.value:
+            return type_thermostats.HC_HEAT_COOL_AUTO
+        return original_hk_hvac_mode_from_state(state)
+
+    thermostat_cls._configure_hvac_modes = fgcair_configure_hvac_modes
+    thermostat_cls._fgcair_dry_auto_patch = True
+    type_thermostats._hk_hvac_mode_from_state = fgcair_hk_hvac_mode_from_state
+    _LOGGER.info("FGCAir HomeKit climate dry mode exposed as Auto")
+    return True
 
 
 async def _async_reload_homekit_after_patch(hass: HomeAssistant) -> None:
