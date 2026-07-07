@@ -234,6 +234,9 @@ def _patch_homekit_climate_configured_names() -> bool:
                 continue
             char = self.driver.loader.get_char(CHAR_CONFIGURED_NAME)
             service.add_characteristic(char)
+            if char.broker is None:
+                char.broker = self
+                self.iid_manager.assign(char)
             service.configure_char(
                 CHAR_CONFIGURED_NAME,
                 value=name,
