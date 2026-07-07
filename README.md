@@ -135,6 +135,8 @@ HomeKit 中的模式显示为 `关闭`、`制冷`、`加热`、`自动`。其中
 
 HomeKit 中如果显示风速控制，可以按 7 段理解为 `1档`、`2档`、`3档`、`4档`、`5档`、`6档`、`自动`。其中 100% 对应自动风速，其余 1-6 档均匀分布。风速可以下发到设备，也会通过 MQTT 回读。
 
+如果 Home App 仍保留旧模式或旧名称缓存，可在 Home Assistant 的开发者工具中调用 `homekit.reset_accessory`，只重建对应的 FGCAir `climate` 实体，不需要移除整个 HomeKit Bridge。集成会为 FGCAir 空调暴露 HomeKit `ConfiguredName`，重建后 Home App 可以继续保存自定义名称。
+
 ## 调试工具
 
 仓库中的 `tools/fgcair_cli.py` 是脱敏后的本地调试工具，可用于登录、列出设备、控制设备、读取 MQTT 状态和记录 MQTT 报文。

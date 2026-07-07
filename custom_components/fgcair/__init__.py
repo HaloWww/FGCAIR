@@ -121,7 +121,8 @@ async def _async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None
 def _patch_homekit_climate() -> bool:
     fan_modes_changed = _patch_homekit_climate_fan_modes()
     modes_changed = _patch_homekit_climate_modes()
-    return fan_modes_changed or modes_changed
+    names_changed = _patch_homekit_climate_configured_names()
+    return fan_modes_changed or modes_changed or names_changed
 
 
 def _patch_homekit_climate_fan_modes() -> bool:
@@ -198,6 +199,49 @@ def _patch_homekit_climate_modes() -> bool:
     thermostat_cls._fgcair_dry_auto_patch = True
     type_thermostats._hk_hvac_mode_from_state = fgcair_hk_hvac_mode_from_state
     _LOGGER.info("FGCAir HomeKit climate dry mode exposed as Auto")
+    return True
+
+
+def _patch_homekit_climate_configured_names() -> bool:
+    try:
+        from homeassistant.components.homekit import type_thermostats
+        from homeassistant.components.homekit.const import CHAR_CONFIGURED_NAME
+        from homeassistant.components.homekit.util import cleanup_name_for_homekit
+        from homeassistant.helpers import entity_registry as er
+    except (ImportError, RuntimeError) as exc:
+        _LOGGER.debug("FGCAir HomeKit configured name patch skipped: %s", exc)
+        return False
+
+    thermostat_cls = type_thermostats.Thermostat
+    if getattr(thermostat_cls, "_fgcair_configured_name_patch", False):
+        return False
+
+    original_init = thermostat_cls.__init__
+
+    def is_fgcair_entity(self: Any) -> bool:
+        entity_entry = er.async_get(self.hass).async_get(self.entity_id)
+        return entity_entry is not None and entity_entry.platform == DOMAIN
+
+    def fgcair_thermostat_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        original_init(self, *args, **kwargs)
+        if not is_fgcair_entity(self):
+            return
+
+        name = cleanup_name_for_homekit(self.display_name)
+        for service_name in (type_thermostats.SERV_THERMOSTAT, type_thermostats.SERV_FANV2):
+            service = self.get_service(service_name)
+            if service is None:
+                continue
+            char = self.driver.loader.get_char(CHAR_CONFIGURED_NAME)
+            service.add_characteristic(char)
+            service.configure_char(
+                CHAR_CONFIGURED_NAME,
+                value=name,
+            )
+
+    thermostat_cls.__init__ = fgcair_thermostat_init
+    thermostat_cls._fgcair_configured_name_patch = True
+    _LOGGER.info("FGCAir HomeKit configured names enabled for climate services")
     return True
 
 
