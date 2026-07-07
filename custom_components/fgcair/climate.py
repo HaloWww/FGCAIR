@@ -78,10 +78,11 @@ class FGCAirClimate(ClimateEntity):
         self._tracked_temp_source: str | None = None
         self._remove_temp_source_listener = None
         self._attr_unique_id = f"fgcair_{self.did}"
-        self._attr_name = _device_name(device, self.index)
+        device_name = _device_name(device, self.index)
+        self._attr_name = None
         self._attr_device_info = {
             "identifiers": {(DOMAIN, self.did)},
-            "name": self._attr_name,
+            "name": device_name,
             "manufacturer": "FGCAir",
             "model": device.get("product_name"),
         }
