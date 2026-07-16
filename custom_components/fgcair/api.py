@@ -233,15 +233,24 @@ class FGCAirClient:
         )
         self._mqtt_client = client
         _LOGGER.info("FGCAir MQTT connect host=%s port=%s client_id=%s gateway=%s", host, port, client_id, gateway_did)
-        await asyncio.to_thread(_mqtt_connect, client, host, port, gateway_did, client_id)
+        disconnected = await asyncio.to_thread(_mqtt_connect, client, host, port, gateway_did, client_id)
         try:
             while not self._mqtt_stop.is_set():
+                if disconnected.is_set() or not client.is_connected():
+                    raise FGCAirError("MQTT 连接已断开，准备重连")
                 for device in devices:
                     payload = _mqtt_query_payload(device)
                     if payload:
-                        client.publish(f"app2dev/{gateway_did}/{client_id}", payload, qos=0)
+                        result = client.publish(f"app2dev/{gateway_did}/{client_id}", payload, qos=0)
+                        if result.rc != mqtt.MQTT_ERR_SUCCESS:
+                            raise FGCAirError(f"MQTT 发布失败 rc={result.rc}")
                         await asyncio.sleep(0.35)
-                await asyncio.sleep(self._mqtt_update_interval)
+                for _ in range(self._mqtt_update_interval):
+                    if self._mqtt_stop.is_set():
+                        break
+                    if disconnected.is_set() or not client.is_connected():
+                        raise FGCAirError("MQTT 连接已断开，准备重连")
+                    await asyncio.sleep(1)
         finally:
             await asyncio.to_thread(_mqtt_disconnect, client)
             if self._mqtt_client is client:
@@ -333,8 +342,9 @@ def _build_mqtt_client(client_id: str, uid: str, token: str, on_message: Callabl
     return client
 
 
-def _mqtt_connect(client: Any, host: str, port: int, gateway_did: str, client_id: str) -> None:
+def _mqtt_connect(client: Any, host: str, port: int, gateway_did: str, client_id: str) -> threading.Event:
     connected = threading.Event()
+    disconnected = threading.Event()
     error: dict[str, int] = {}
 
     def on_connect(_client: Any, _userdata: Any, _flags: Any, rc: int) -> None:
@@ -342,7 +352,11 @@ def _mqtt_connect(client: Any, host: str, port: int, gateway_did: str, client_id
             error["rc"] = rc
         connected.set()
 
+    def on_disconnect(_client: Any, _userdata: Any, _rc: int, *_extra: Any) -> None:
+        disconnected.set()
+
     client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
     client.connect(host, port, keepalive=15)
     client.loop_start()
     if not connected.wait(20):
@@ -356,6 +370,7 @@ def _mqtt_connect(client: Any, host: str, port: int, gateway_did: str, client_id
     client.subscribe(f"ser2cli_res/{client_id}/#", qos=0)
     client.subscribe(f"dev2app/{gateway_did}", qos=0)
     client.subscribe(f"dev2app/{gateway_did}/{client_id}", qos=0)
+    return disconnected
 
 
 def _mqtt_disconnect(client: Any) -> None:
