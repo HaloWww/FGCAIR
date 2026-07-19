@@ -409,7 +409,15 @@ def mqtt_sub_topics(device: dict[str, Any], topic_mode: str) -> list[str]:
 
 def token_expired_error(exc: Exception) -> bool:
     text = str(exc)
-    return "token expired" in text or '"error_code":9006' in text or '"error_code":"9006"' in text
+    lowered = text.lower()
+    return (
+        "token expired" in lowered
+        or "token invalid" in lowered
+        or '"error_code":9004' in text
+        or '"error_code":"9004"' in text
+        or '"error_code":9006' in text
+        or '"error_code":"9006"' in text
+    )
 
 
 def load_cached_session(cache_path: str, username: str, app_id: str) -> Session | None:
@@ -583,7 +591,7 @@ def parse_mqtt_payload(payload: bytes) -> tuple[str, dict[str, Any], bytes] | No
     mode_code = (mode_flags & 0x70) >> 4
     speed = body[7] * 2 + (1 if mode_flags & 0x80 else 0)
     state = {
-        "power": bool(power & 0x01) if power in (0, 1, 0x80, 0x81) else None,
+        "power": bool(power & 0x01),
         "mode_raw": mode_raw,
         "mode_code": mode_code,
         "mode": mqtt_mode_name(mode_code),

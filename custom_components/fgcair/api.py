@@ -43,7 +43,14 @@ class FGCAirSession:
 
 def _is_token_expired_error(text: str) -> bool:
     lowered = text.lower()
-    return "token expired" in lowered or '"error_code":9006' in text or '"error_code":"9006"' in text
+    return (
+        "token expired" in lowered
+        or "token invalid" in lowered
+        or '"error_code":9004' in text
+        or '"error_code":"9004"' in text
+        or '"error_code":9006' in text
+        or '"error_code":"9006"' in text
+    )
 
 
 def _request_sync(
@@ -434,8 +441,7 @@ def _parse_mqtt_state_payload(payload: bytes) -> dict[str, dict[str, Any]]:
         attrs["Mode_indoor_PK4"] = mode
     if 0 <= speed <= 6:
         attrs["Speed_indoor_PK4"] = speed
-    if power in (0, 1, 0x80, 0x81):
-        attrs["Power_indoor_PK4"] = bool(power & 0x01)
+    attrs["Power_indoor_PK4"] = bool(power & 0x01)
     if target_temp is not None:
         attrs["Temp_indoor_PK4"] = target_temp
     if room_temp:
